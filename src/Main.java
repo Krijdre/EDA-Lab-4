@@ -86,10 +86,10 @@ class AreasAtencion{
         this.nombre = nombre;
         this.capacidadMaxima = capacidadMaxima;
         this.pacientesHeap = new PriorityQueue<>((p1, p2) -> {
-            if (p1.tiempoEsperaActual() != p2.tiempoEsperaActual()){
-                return Long.compare(p1.tiempoEsperaActual(), p2.tiempoEsperaActual());
+            if (p1.getCategoria() != p2.getCategoria()){
+                return Integer.compare(p1.getCategoria(), p2.getCategoria());
             }
-            return Integer.compare(p1.getCategoria(), p2.getCategoria());
+            return Long.compare(p1.tiempoEsperaActual(), p2.tiempoEsperaActual());
         });
     }
 

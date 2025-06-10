@@ -73,7 +73,7 @@ class Paciente {
         this.historialCambios.push(cambio);
     }
     public String obtenerUltimaCambio() {
-        return this.historialCambios.pop();
+        return this.historialCambios.peek();
     }
 }
 
@@ -81,6 +81,17 @@ class AreasAtencion{
     private String nombre;
     private PriorityQueue<Paciente> pacientesHeap;
     private int capacidadMaxima;
+
+    public AreasAtencion(String nombre, int capacidadMaxima) {
+        this.nombre = nombre;
+        this.capacidadMaxima = capacidadMaxima;
+        this.pacientesHeap = new PriorityQueue<>((p1, p2) -> {
+            if (p1.tiempoEsperaActual() != p2.tiempoEsperaActual()){
+                return Long.compare(p1.tiempoEsperaActual(), p2.tiempoEsperaActual());
+            }
+            return Integer.compare(p1.getCategoria(), p2.getCategoria());
+        });
+    }
 
     public void ingresarPaciente(Paciente p) {
         this.pacientesHeap.offer(p);
@@ -96,9 +107,13 @@ class AreasAtencion{
             return true;
         }
     }
-    /*public List<Paciente> obtenerPacientesPorHeapSort() {
-
-    }*/
+    public List<Paciente> obtenerPacientesPorHeapSort() {
+        List<Paciente> pacientesPorHeap = new ArrayList<>();
+        while (!pacientesHeap.isEmpty()) {
+            pacientesPorHeap.add(this.pacientesHeap.poll());
+        }
+        return pacientesPorHeap;
+    }
 
 }
 
@@ -110,7 +125,12 @@ class Hospital {
 
     public Hospital() {
         this.pacientesTotales = new HashMap<>();
-        this.colaAtencion = new PriorityQueue<>();
+        this.colaAtencion = new PriorityQueue<>((p1, p2) -> {
+            if (p1.getCategoria() != p2.getCategoria()){
+                return Integer.compare(p1.getCategoria(), p2.getCategoria());
+            }
+            return Long.compare(p1.tiempoEsperaActual(), p2.tiempoEsperaActual());
+        });
         this.areasAtencion = new HashMap<>();
         this.pacientesAtendidos = new ArrayList<>();
     }

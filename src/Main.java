@@ -1,3 +1,6 @@
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 class Paciente {
@@ -17,7 +20,6 @@ class Paciente {
         this.categoria = categoria;
         this.estado = estado;
         this.area = area;
-        this.tiempoLlegada = System.currentTimeMillis();
         this.historialCambios = new Stack<>();
     }
 
@@ -57,6 +59,12 @@ class Paciente {
     public void setArea(String area) {
         this.area = area;
     }
+    public long getTiempoLlegada() {
+        return tiempoLlegada;
+    }
+    public void setTiempoLlegada(long tiempoLlegada) {
+        this.tiempoLlegada = tiempoLlegada;
+    }
 
     public long tiempoEsperaActual() {
         return System.currentTimeMillis() - this.tiempoLlegada;
@@ -88,9 +96,9 @@ class AreasAtencion{
             return true;
         }
     }
-    public List<Paciente> obtenerPacientesPorHeapSort() {
+    /*public List<Paciente> obtenerPacientesPorHeapSort() {
 
-    }
+    }*/
 
 }
 
@@ -110,7 +118,7 @@ class Hospital {
     public void registrarPaciente(Paciente p) {
         this.pacientesTotales.put(p.getId(), p);
     }
-    public void reasignarPaciente(String id, int nuevaCategoria) {
+    /*public void reasignarPaciente(String id, int nuevaCategoria) {
 
     }
     public Paciente atenderSiguiente() {
@@ -121,6 +129,90 @@ class Hospital {
     }
     public AreasAtencion obtenerArea(String nombre) {
 
+    }*/
+
+}
+
+class GenerarPacientes {
+    private String[] nombres = {
+            "Juan", "María", "Carlos", "Ana", "José", "Laura", "Pedro", "Isabel",
+            "Miguel", "Sofía", "Fernando", "Carmen", "Daniel", "Patricia", "Francisco",
+            "Rosa", "Alberto", "Elena", "Ricardo", "Diana", "Gabriel", "Mónica",
+            "Eduardo", "Lucía", "Pablo", "Andrea", "Roberto", "Beatriz", "Antonio", "Teresa"
+    };
+    private String[] apellidos = {
+            "García", "Rodríguez", "López", "Martínez", "González", "Pérez", "Sánchez", "Ramírez",
+            "Torres", "Flores", "Rivera", "Gómez", "Díaz", "Reyes", "Morales", "Cruz",
+            "Ortiz", "Ramos", "Romero", "Álvarez", "Mendoza", "Ruiz", "Herrera", "Medina",
+            "Castro", "Vargas", "Jiménez", "Silva", "Munoz", "Delgado"
+    };
+    private String[] areas = {
+            "SAPU", "urgencia_adulto", "infantil"};
+    private String estado = "en_espera";
+    private int id = 0;
+    private Random random = new Random();
+
+    private int generarCategoria() {
+        double randomNum = random.nextDouble();
+        if (randomNum < 0.10) {
+            return 1;
+        } else if (randomNum < 0.25) {
+            return 2;
+        } else if (randomNum < 0.43) {
+            return 3;
+        } else if (randomNum < 0.70) {
+            return 4;
+        } else {
+            return 5;
+        }
+    }
+
+    public List<Paciente> generarPacientes(int cantidad) {
+        List<Paciente> pacientes = new ArrayList<>();
+        long tiempo = 0;
+        for (int i = 0; i < cantidad; i++) {
+            Paciente p = new Paciente(
+                    this.nombres[this.random.nextInt(this.nombres.length)],
+                    this.apellidos[this.random.nextInt(this.apellidos.length)],
+                    String.valueOf(this.id++),
+                    this.generarCategoria(),
+                    this.estado,
+                    this.areas[this.random.nextInt(this.areas.length)]
+            );
+            long tiempoLlegada = tiempo + (i * 600);
+            p.setTiempoLlegada(tiempoLlegada);
+            pacientes.add(p);
+        }
+        return pacientes;
+    }
+
+    public void guardarPacientesEnArchivo(List<Paciente> pacientes, String nombreArchivo) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(nombreArchivo))) {
+            for (Paciente paciente : pacientes) {
+                writer.write(
+                        String.format(
+                                "ID: %s, Nombre: %s %s, Categoría: C%d, Llegada: %d, Estado: %s",
+                                paciente.getId(),
+                                paciente.getNombre(),
+                                paciente.getApellido(),
+                                paciente.getCategoria(),
+                                paciente.getTiempoLlegada(),
+                                paciente.getEstado()
+                        )
+                );
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            System.err.println("Error al guardar el archivo: " + e.getMessage());
+        }
+    }
+
+
+    public static void main(String[] args) {
+        GenerarPacientes generador = new GenerarPacientes();
+        List<Paciente> pacientes = generador.generarPacientes(144); // Generar 100 pacientes de prueba
+        generador.guardarPacientesEnArchivo(pacientes, "Pacientes_24h.txt");
+        System.out.println("Pacientes generados y guardados en el archivo.");
     }
 
 }

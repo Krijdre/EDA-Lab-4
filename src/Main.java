@@ -109,8 +109,9 @@ class AreasAtencion{
     }
     public List<Paciente> obtenerPacientesPorHeapSort() {
         List<Paciente> pacientesPorHeap = new ArrayList<>();
-        while (!pacientesHeap.isEmpty()) {
-            pacientesPorHeap.add(this.pacientesHeap.poll());
+        PriorityQueue<Paciente> pacientesHeapAux = new PriorityQueue<>(this.pacientesHeap);
+        while (!pacientesHeapAux.isEmpty()) {
+            pacientesPorHeap.add(pacientesHeapAux.poll());
         }
         return pacientesPorHeap;
     }

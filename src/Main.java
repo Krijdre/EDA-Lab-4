@@ -13,7 +13,8 @@ class Paciente {
     private String area;
     private Stack<String> historialCambios;
 
-    public Paciente(String nombre, String apellido, String id, int categoria, String estado, String area) {
+    public Paciente(String nombre, String apellido, String id, int categoria, String estado, String area,
+                    long tiempoLlegada) {
         this.nombre = nombre;
         this.apellido = apellido;
         this.id = id;
@@ -21,6 +22,7 @@ class Paciente {
         this.estado = estado;
         this.area = area;
         this.historialCambios = new Stack<>();
+        this.tiempoLlegada = tiempoLlegada;
     }
 
     public String getNombre() {
@@ -67,22 +69,22 @@ class Paciente {
     }
 
     public long tiempoEsperaActual() {
-        return System.currentTimeMillis() - this.tiempoLlegada;
+        return System.currentTimeMillis() - this.tiempoLlegada / (1000 * 60);
     }
     public void registrarCambio(String cambio) {
         this.historialCambios.push(cambio);
     }
     public String obtenerUltimaCambio() {
-        return this.historialCambios.peek();
+        return this.historialCambios.pop();
     }
 }
 
-class AreasAtencion{
+class AreaAtencion {
     private String nombre;
     private PriorityQueue<Paciente> pacientesHeap;
     private int capacidadMaxima;
 
-    public AreasAtencion(String nombre, int capacidadMaxima) {
+    public AreaAtencion(String nombre, int capacidadMaxima) {
         this.nombre = nombre;
         this.capacidadMaxima = capacidadMaxima;
         this.pacientesHeap = new PriorityQueue<>((p1, p2) -> {
@@ -121,7 +123,7 @@ class AreasAtencion{
 class Hospital {
     private Map<String, Paciente> pacientesTotales;
     private PriorityQueue<Paciente> colaAtencion;
-    private Map<String, AreasAtencion> areasAtencion;
+    private Map<String, AreaAtencion> areasAtencion;
     private List<Paciente> pacientesAtendidos;
 
     public Hospital() {
@@ -134,23 +136,54 @@ class Hospital {
         });
         this.areasAtencion = new HashMap<>();
         this.pacientesAtendidos = new ArrayList<>();
+        areasAtencion.put("SAPU", new AreaAtencion("SAPU", 45));
+        areasAtencion.put("urgencia_adulto", new AreaAtencion("urgencia_adulto", 38));
+        areasAtencion.put("infantil", new AreaAtencion("infantil", 10));
     }
 
     public void registrarPaciente(Paciente p) {
         this.pacientesTotales.put(p.getId(), p);
+        this.colaAtencion.offer(p);
     }
-    /*public void reasignarPaciente(String id, int nuevaCategoria) {
-
+    public void reasignarPaciente(String id, int nuevaCategoria) {
+        Paciente p = pacientesTotales.get(id);
+        if (p != null) {
+            int antiguaCategoria = p.getCategoria();
+            p.setCategoria(nuevaCategoria);
+            p.registrarCambio("De C" + antiguaCategoria + " a C" + nuevaCategoria);
+        }
+        else {
+            System.out.println("No existe el paciente con el ID: " + id);
+        }
     }
     public Paciente atenderSiguiente() {
-
+        Paciente p = this.colaAtencion.poll();
+        if (p != null) {
+            AreaAtencion area = areasAtencion.get(p.getArea());
+            Paciente pacienteAnterior = area.atenderPaciente();
+            if (pacienteAnterior != null) {
+                pacientesAtendidos.add(pacienteAnterior);
+                pacienteAnterior.registrarCambio("Paciente atendido");
+                pacienteAnterior.setEstado("atendido");
+            }
+            p.setEstado("en_atencion");
+            area.ingresarPaciente(p);
+            p.registrarCambio("Paciente siendo atendido");
+        }
+        return p;
     }
     public List<Paciente> obtenerPacientesPorCategoria(int categoria) {
-
+        List<Paciente> pacientesPorCategoria = new ArrayList<>();
+        for (Paciente p : pacientesTotales.values()) {
+            if (p.getCategoria() == categoria) {
+                pacientesPorCategoria.add(p);
+            }
+        }
+        return pacientesPorCategoria;
     }
-    public AreasAtencion obtenerArea(String nombre) {
-
-    }*/
+    public AreaAtencion obtenerArea(String nombre) {
+        return areasAtencion.get(nombre);
+    }
 
 }
 
@@ -167,8 +200,7 @@ class GenerarPacientes {
             "Ortiz", "Ramos", "Romero", "Álvarez", "Mendoza", "Ruiz", "Herrera", "Medina",
             "Castro", "Vargas", "Jiménez", "Silva", "Munoz", "Delgado"
     };
-    private String[] areas = {
-            "SAPU", "urgencia_adulto", "infantil"};
+    private String[] areas = {"SAPU", "urgencia_adulto", "infantil"};
     private String estado = "en_espera";
     private int id = 0;
     private Random random = new Random();
@@ -192,16 +224,16 @@ class GenerarPacientes {
         List<Paciente> pacientes = new ArrayList<>();
         long tiempo = 0;
         for (int i = 0; i < cantidad; i++) {
+            long tiempoLlegada = tiempo + (i * 600);
             Paciente p = new Paciente(
                     this.nombres[this.random.nextInt(this.nombres.length)],
                     this.apellidos[this.random.nextInt(this.apellidos.length)],
                     String.valueOf(this.id++),
                     this.generarCategoria(),
                     this.estado,
-                    this.areas[this.random.nextInt(this.areas.length)]
+                    this.areas[this.random.nextInt(this.areas.length)],
+                    tiempoLlegada  // Añadir el tiempoLlegada en el constructor
             );
-            long tiempoLlegada = tiempo + (i * 600);
-            p.setTiempoLlegada(tiempoLlegada);
             pacientes.add(p);
         }
         return pacientes;
@@ -212,14 +244,16 @@ class GenerarPacientes {
             for (Paciente paciente : pacientes) {
                 writer.write(
                         String.format(
-                                "ID: %s, Nombre: %s %s, Categoría: C%d, Llegada: %d, Estado: %s",
+                                "ID: %s, Nombre: %s %s, Categoría: C%d, Área: %s, Llegada: %d, Estado: %s",
                                 paciente.getId(),
                                 paciente.getNombre(),
                                 paciente.getApellido(),
                                 paciente.getCategoria(),
+                                paciente.getArea(),
                                 paciente.getTiempoLlegada(),
                                 paciente.getEstado()
                         )
+
                 );
                 writer.newLine();
             }

@@ -280,287 +280,244 @@ class Hospital {
 
     }
 
-    class SimuladorUrgencia {
-        private Hospital hospital;
-        private List<Paciente> pacientesEnEspera;
-        private Map<Integer, Integer> contadorPorCategoria;
-        private Map<Integer, List<Long>> tiemposEspera;
-        private List<Paciente> pacientesFueraTiempo;
-        private int pacientesAcumulados;
+class SimuladorUrgencia {
+    private Hospital hospital;
+    private List<Paciente> pacientesEnEspera;
+    private Map<Integer, Integer> pacientesPorCategoria;
+    private Map<Integer, List<Long>> tiemposEsperaPorCategoria;
+    private List<Paciente> pacientesFueraTiempo;
 
-        // Tiempos máximos de espera por categoría (en minutos)
-        private static final Map<Integer, Integer> TIEMPOS_MAXIMOS = Map.of(
-                1, 0,
-                2, 30,
-                3, 90,
-                4, 180,
-                5, Integer.MAX_VALUE
-        );
+    // Tiempos máximos de espera por categoría (en minutos)
+    private static final Map<Integer, Integer> TIEMPOS_MAXIMOS = Map.of(
+            1, 0,      // Inmediato
+            2, 30,     // 30 minutos
+            3, 90,     // 90 minutos
+            4, 180,    // 180 minutos
+            5, Integer.MAX_VALUE  // Sin límite específico
+    );
 
-        public SimuladorUrgencia() {
-            this.hospital = new Hospital();
-            this.pacientesEnEspera = new ArrayList<>();
-            this.contadorPorCategoria = new HashMap<>();
-            this.tiemposEspera = new HashMap<>();
-            this.pacientesFueraTiempo = new ArrayList<>();
-            this.pacientesAcumulados = 0;
+    public SimuladorUrgencia() {
+        this.hospital = new Hospital();
+        this.pacientesEnEspera = new ArrayList<>();
+        this.pacientesPorCategoria = new HashMap<>();
+        this.tiemposEsperaPorCategoria = new HashMap<>();
+        this.pacientesFueraTiempo = new ArrayList<>();
 
-            // Inicializar contadores y listas de tiempos
-            for (int i = 1; i <= 5; i++) {
-                contadorPorCategoria.put(i, 0);
-                tiemposEspera.put(i, new ArrayList<>());
-            }
+        // Inicializar contadores y listas de tiempos
+        for (int i = 1; i <= 5; i++) {
+            pacientesPorCategoria.put(i, 0);
+            tiemposEsperaPorCategoria.put(i, new ArrayList<>());
         }
 
-        public void simular(int pacientesPorDia) {
-            cargarPacientesDesdeArchivo("Pacientes_24h.txt");
-            int pacientesProcesados = 0;
-            long timestamp_inicio = 0;
+        // Cargar pacientes desde el archivo generado
+        cargarPacientesDesdeArchivo("Pacientes_24h.txt");
+    }
 
-            // Inicializar mapas
-            Map<String, Long> ultimoTiempoAtencionPorArea = new HashMap<>();
-            for (String area : new String[]{"SAPU", "urgencia_adulto", "infantil"}) {
-                ultimoTiempoAtencionPorArea.put(area, timestamp_inicio);
+    public void simular(int pacientesPorDia) {
+        long tiempoSimulacion = 24 * 60; // 24 horas en minutos
+        long tiempoActual = 0;
+        int pacientesNuevos = 0;
+
+        System.out.println("Iniciando simulación de 24 horas de urgencias hospitalarias...");
+
+        while (tiempoActual < tiempoSimulacion) {
+            // Cada 10 minutos llega un nuevo paciente
+            if (tiempoActual % 10 == 0 && !pacientesEnEspera.isEmpty()) {
+                Paciente nuevoPaciente = pacientesEnEspera.remove(0);
+                // Almacenamos el tiempo de llegada en minutos
+                nuevoPaciente.setTiempoLlegada(tiempoActual);
+                hospital.registrarPaciente(nuevoPaciente);
+                pacientesNuevos++;
+                System.out.println("Minuto " + tiempoActual + ": Llegó paciente ID: " + nuevoPaciente.getId() +
+                        ", Categoría: C" + nuevoPaciente.getCategoria());
             }
 
-            // Simulación por minutos (24 horas = 1440 minutos)
-            for (int minuto = 0; minuto < 1440; minuto++) {
-                long tiempoActual = timestamp_inicio + (minuto * 60 * 1000);
-
-                // Llegada de pacientes cada 10 minutos
-                if (minuto % 10 == 0 && pacientesProcesados < pacientesPorDia) {
-                    if (!pacientesEnEspera.isEmpty()) {
-                        Paciente nuevoPaciente = pacientesEnEspera.remove(0);
-                        nuevoPaciente.setTiempoLlegada(tiempoActual);
-                        hospital.registrarPaciente(nuevoPaciente);
-                        pacientesProcesados++;
-                    }
-                }
-
-                // Atender UN paciente cada 15 minutos
-                if (minuto % 15 == 0) {
-                    atenderPaciente(tiempoActual);
-                }
+            // Cada 15 minutos se atiende a un paciente
+            if (tiempoActual % 15 == 0 && tiempoActual > 0) {
+                atenderPaciente(tiempoActual);
             }
 
-            generarReporteSimulacion();
+            // Si se acumulan 3 nuevos pacientes, se atienden 2 de forma inmediata
+            if (pacientesNuevos >= 3) {
+                System.out.println("Minuto " + tiempoActual + ": Se acumularon 3 pacientes, atendiendo 2 inmediatamente");
+                atenderPaciente(tiempoActual);
+                atenderPaciente(tiempoActual);
+                pacientesNuevos = 0;
+            }
+
+            // Verificar pacientes que excedieron tiempo máximo de espera
+            verificarTiemposMaximos(tiempoActual);
+
+            tiempoActual++;
         }
 
+        // Generar reporte final
+        generarReporteSimulacion();
+    }
 
+    private void atenderPaciente(long tiempoActual) {
+        PriorityQueue<Paciente> colaAtencion = hospital.getColaAtencion();
+        if (!colaAtencion.isEmpty()) {
+            Paciente paciente = colaAtencion.poll();
 
+            // Registrar tiempo de espera (en minutos)
+            long tiempoEspera = tiempoActual - paciente.getTiempoLlegada();
+            tiemposEsperaPorCategoria.get(paciente.getCategoria()).add(tiempoEspera);
 
-        private void atenderPaciente(long tiempoActual) {
-            Paciente paciente = hospital.atenderSiguiente();
-            if (paciente != null) {
-                registrarAtencion(paciente, tiempoActual);
-            }
-        }
-
-
-
-        private void atenderPacienteUrgente(long tiempoActual, Map<String, Long> ultimoTiempoAtencionPorArea) {
-            Paciente paciente = hospital.atenderSiguiente();
-            if (paciente != null) {
-                // Para casos urgentes, atendemos 5 minutos después del último paciente o en el tiempo actual
-                long ultimaAtencion = ultimoTiempoAtencionPorArea.get(paciente.getArea());
-                long tiempoAtencion = Math.max(tiempoActual, ultimaAtencion + (5 * 60 * 1000));
-                ultimoTiempoAtencionPorArea.put(paciente.getArea(), tiempoAtencion);
-
-                registrarAtencion(paciente, tiempoAtencion);
-            }
-        }
-
-
-
-        private void registrarAtencion(Paciente paciente, long tiempoAtencion) {
-            long tiempoEsperaMs = tiempoAtencion - paciente.getTiempoLlegada();
-            // Convertimos a minutos
-            long tiempoEsperaMinutos = tiempoEsperaMs / 60000;
-            tiemposEspera.get(paciente.getCategoria()).add(tiempoEsperaMinutos);
-            contadorPorCategoria.put(
+            // Actualizar contadores
+            pacientesPorCategoria.put(
                     paciente.getCategoria(),
-                    contadorPorCategoria.get(paciente.getCategoria()) + 1
+                    pacientesPorCategoria.get(paciente.getCategoria()) + 1
             );
+
+            // Actualizar estado del paciente
             paciente.setEstado("atendido");
-            System.out.println("Debug Atención detallado - Paciente: " + paciente.getId());
-            System.out.println("  Categoría: " + paciente.getCategoria());
-            System.out.println("  Tiempo Llegada (ms): " + paciente.getTiempoLlegada());
-            System.out.println("  Tiempo Atención (ms): " + tiempoAtencion);
-            System.out.println("  Tiempo Espera (ms): " + tiempoEsperaMs);
-            System.out.println("  Tiempo Espera (min): " + tiempoEsperaMinutos);
 
-
-        }
-
-        private void verificarTiemposMaximos(long tiempoActual) {
-            // Crear una lista temporal para mantener los pacientes que no exceden tiempo
-            List<Paciente> pacientesEnEspera = new ArrayList<>();
-            PriorityQueue<Paciente> cola = hospital.getColaAtencion();
-
-            // Limpiar la cola actual y verificar cada paciente
-            while (!cola.isEmpty()) {
-                Paciente paciente = cola.poll();
-                long tiempoEsperaMinutos = (tiempoActual - paciente.getTiempoLlegada()) / (60 * 1000);
-
-                // Verificar si el paciente ha excedido su tiempo máximo de espera
-                int tiempoMaximo = TIEMPOS_MAXIMOS.getOrDefault(paciente.getCategoria(), Integer.MAX_VALUE);
-
-                if (tiempoEsperaMinutos > tiempoMaximo) {
-                    // Si excedió el tiempo máximo, lo agregamos a la lista de pacientes fuera de tiempo
-                    pacientesFueraTiempo.add(paciente);
-
-                    // Registrar la atención con prioridad máxima
-                    registrarAtencion(paciente, tiempoActual);
-
-                    // Actualizar estadísticas
-                    contadorPorCategoria.put(
-                            paciente.getCategoria(),
-                            contadorPorCategoria.get(paciente.getCategoria()) + 1
-                    );
-
-                    System.out.println("¡ALERTA! Paciente ID: " + paciente.getId() +
-                            " excedió tiempo máximo de espera. Categoría: " +
-                            paciente.getCategoria() +
-                            ", Tiempo esperado: " + tiempoEsperaMinutos +
-                            " minutos (máximo: " + tiempoMaximo + " minutos)");
-                } else {
-                    // Si no excedió el tiempo, lo mantenemos en la cola
-                    pacientesEnEspera.add(paciente);
-                }
-            }
-
-            // Reintegrar los pacientes que no excedieron el tiempo máximo
-            for (Paciente p : pacientesEnEspera) {
-                cola.offer(p);
-            }
-        }
-
-
-
-        private void validarLinea(String linea) {
-            if (linea == null || linea.trim().isEmpty()) {
-                throw new IllegalArgumentException("La línea está vacía");
-            }
-
-            String[] partes = linea.split(", ");
-            if (partes.length != 6) {
-                throw new IllegalArgumentException("La línea no tiene el formato correcto. Se esperaban 6 partes, se encontraron: " + partes.length);
-            }
-
-            if (!partes[2].contains("Categoría: C")) {
-                throw new IllegalArgumentException("Formato de categoría incorrecto: " + partes[2]);
-            }
-
-            // Imprimir información de depuración
-            System.out.println("Procesando línea: " + linea);
-            for (int i = 0; i < partes.length; i++) {
-                System.out.println("Parte " + i + ": " + partes[i]);
-            }
-        }
-
-
-        private void cargarPacientesDesdeArchivo(String archivo) {
-            try (BufferedReader br = new BufferedReader(new FileReader(archivo))) {
-                String linea;
-                int numeroLinea = 0;
-                while ((linea = br.readLine()) != null) {
-                    numeroLinea++;
-                    try {
-                        validarLinea(linea);
-                        Paciente p = parsearLineaPaciente(linea);
-                        if (p != null) {
-                            pacientesEnEspera.add(p);
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Error en línea " + numeroLinea + ": " + e.getMessage());
-                    }
-                }
-                System.out.println("Pacientes cargados exitosamente: " + pacientesEnEspera.size());
-            } catch (IOException e) {
-                System.err.println("Error al leer el archivo: " + e.getMessage());
-            }
-        }
-
-
-        private Paciente parsearLineaPaciente(String linea) {
-            try {
-                String[] partes = linea.split(", ");
-
-                // Extraer ID
-                String id = partes[0].substring(partes[0].indexOf(": ") + 2);
-
-                // Extraer nombre completo
-                String nombreCompleto = partes[1].substring(partes[1].indexOf(": ") + 2);
-                String[] partesNombre = nombreCompleto.split(" ");
-                String nombre = partesNombre[0];
-                String apellido = partesNombre[1];
-
-                // Extraer categoría (mejorado)
-                String categoriaStr = partes[2].trim();
-                int categoria = Integer.parseInt(categoriaStr.substring(
-                        categoriaStr.lastIndexOf("C") + 1).trim());
-
-                // Extraer área
-                String area = partes[3].substring(partes[3].indexOf(": ") + 2);
-
-                // Extraer tiempo de llegada
-                String llegadaStr = partes[4].substring(partes[4].indexOf(": ") + 2);
-                long llegada = Long.parseLong(llegadaStr);
-
-                // Extraer estado
-                String estado = partes[5].substring(partes[5].indexOf(": ") + 2);
-
-                return new Paciente(nombre, apellido, id, categoria, estado, area, llegada);
-
-            } catch (Exception e) {
-                System.err.println("Error al parsear línea: " + linea);
-                System.err.println("Detalles del error: " + e.getMessage());
-                return null;
-            }
-        }
-
-
-        private void generarReporteSimulacion() {
-            System.out.println("\n=== REPORTE DE SIMULACIÓN DE URGENCIAS ===\n");
-
-            // Pacientes atendidos por categoría
-            System.out.println("Pacientes atendidos por categoría:");
-            contadorPorCategoria.forEach((categoria, cantidad) ->
-                    System.out.printf("Categoría %d: %d pacientes\n", categoria, cantidad)
-            );
-
-            // Tiempos promedio de espera
-            System.out.println("\nTiempos promedio de espera por categoría:");
-            tiemposEspera.forEach((categoria, tiempos) -> {
-                if (!tiempos.isEmpty()) {
-                    double promedio = tiempos.stream()
-                            .mapToLong(t -> t)
-                            .average()
-                            .getAsDouble();
-                    // Ya no necesitamos dividir por 60000 porque los tiempos ya están en minutos
-                    System.out.printf("Categoría %d: %.2f minutos\n", categoria, promedio);
-                } else {
-                    System.out.printf("Categoría %d: 0.00 minutos\n", categoria);
-                }
-            });
-
-            // Pacientes fuera de tiempo
-            System.out.println("\nPacientes que excedieron tiempo máximo: " +
-                    pacientesFueraTiempo.size());
-            if (!pacientesFueraTiempo.isEmpty()) {
-                System.out.println("\nDetalle de pacientes que excedieron tiempo máximo:");
-                pacientesFueraTiempo.forEach(p ->
-                        System.out.printf("ID: %s, Categoría: %d, Área: %s\n",
-                                p.getId(), p.getCategoria(), p.getArea())
-                );
-            }
-        }
-
-        public static void main(String[] args) {
-            SimuladorUrgencia simulador = new SimuladorUrgencia();
-            simulador.simular(144); // 24 horas con llegadas cada 10 minutos
+            System.out.println("Minuto " + tiempoActual + ": Atendido paciente ID: " + paciente.getId() +
+                    ", Categoría: C" + paciente.getCategoria() +
+                    ", Tiempo de espera: " + tiempoEspera + " minutos");
         }
     }
+
+    private void verificarTiemposMaximos(long tiempoActual) {
+        // Creamos una copia temporal de la cola para no modificarla mientras iteramos
+        PriorityQueue<Paciente> colaOriginal = hospital.getColaAtencion();
+        PriorityQueue<Paciente> nuevaCola = new PriorityQueue<>((p1, p2) -> {
+            if (p1.getCategoria() != p2.getCategoria()) {
+                return Integer.compare(p1.getCategoria(), p2.getCategoria());
+            }
+            return Long.compare(p1.getTiempoLlegada(), p2.getTiempoLlegada());
+        });
+
+        List<Paciente> pacientesExcedidos = new ArrayList<>();
+
+        // Revisar cada paciente para ver si excedió su tiempo máximo de espera
+        while (!colaOriginal.isEmpty()) {
+            Paciente paciente = colaOriginal.poll();
+            long tiempoEspera = tiempoActual - paciente.getTiempoLlegada();
+            int tiempoMaximo = TIEMPOS_MAXIMOS.get(paciente.getCategoria());
+
+            if (tiempoEspera > tiempoMaximo && tiempoMaximo > 0) {
+                // Excedió tiempo máximo, lo atendemos inmediatamente
+                pacientesExcedidos.add(paciente);
+                System.out.println("¡ALERTA! Minuto " + tiempoActual + ": Paciente ID: " + paciente.getId() +
+                        " (Categoría C" + paciente.getCategoria() + ") excedió tiempo máximo de espera: " +
+                        tiempoEspera + " minutos (máximo: " + tiempoMaximo + " minutos)");
+            } else {
+                // No excedió tiempo, lo devolvemos a la cola
+                nuevaCola.offer(paciente);
+            }
+        }
+
+        // Atender inmediatamente los pacientes que excedieron su tiempo
+        for (Paciente paciente : pacientesExcedidos) {
+            tiemposEsperaPorCategoria.get(paciente.getCategoria()).add(tiempoActual - paciente.getTiempoLlegada());
+            pacientesPorCategoria.put(
+                    paciente.getCategoria(),
+                    pacientesPorCategoria.get(paciente.getCategoria()) + 1
+            );
+            paciente.setEstado("atendido");
+            pacientesFueraTiempo.add(paciente);
+        }
+
+        // Restaurar la cola con los pacientes que no excedieron tiempo
+        hospital.getColaAtencion().clear();
+        while (!nuevaCola.isEmpty()) {
+            hospital.getColaAtencion().offer(nuevaCola.poll());
+        }
+    }
+
+    private void cargarPacientesDesdeArchivo(String nombreArchivo) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(nombreArchivo))) {
+            String linea;
+            while ((linea = reader.readLine()) != null) {
+                try {
+                    Paciente paciente = parsearLineaPaciente(linea);
+                    if (paciente != null) {
+                        // Convertir el tiempo de llegada a minutos (si está en segundos)
+                        long tiempoEnMinutos = paciente.getTiempoLlegada() / 60;
+                        paciente.setTiempoLlegada(tiempoEnMinutos);
+                        pacientesEnEspera.add(paciente);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error al parsear línea: " + linea);
+                    System.err.println("Detalles: " + e.getMessage());
+                }
+            }
+            System.out.println("Se cargaron " + pacientesEnEspera.size() + " pacientes del archivo");
+        } catch (IOException e) {
+            System.err.println("Error al leer el archivo: " + e.getMessage());
+        }
+    }
+
+    private Paciente parsearLineaPaciente(String linea) {
+        try {
+            String[] partes = linea.split(", ");
+
+            // Extraer ID
+            String id = partes[0].substring(partes[0].indexOf(": ") + 2);
+
+            // Extraer nombre y apellido
+            String nombreCompleto = partes[1].substring(partes[1].indexOf(": ") + 2);
+            String[] partesNombre = nombreCompleto.split(" ");
+            String nombre = partesNombre[0];
+            String apellido = partesNombre[1];
+
+            // Extraer categoría
+            String categoriaStr = partes[2].substring(partes[2].lastIndexOf("C") + 1);
+            int categoria = Integer.parseInt(categoriaStr);
+
+            // Extraer área
+            String area = partes[3].substring(partes[3].indexOf(": ") + 2);
+
+            // Extraer tiempo de llegada
+            String tiempoLlegadaStr = partes[4].substring(partes[4].indexOf(": ") + 2);
+            long tiempoLlegada = Long.parseLong(tiempoLlegadaStr);
+
+            // Extraer estado
+            String estado = partes[5].substring(partes[5].indexOf(": ") + 2);
+
+            return new Paciente(nombre, apellido, id, categoria, estado, area, tiempoLlegada);
+        } catch (Exception e) {
+            System.err.println("Error analizando línea: " + linea);
+            System.err.println("Mensaje de error: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void generarReporteSimulacion() {
+        System.out.println("\n=== REPORTE FINAL DE SIMULACIÓN ===");
+
+        // 1. Cantidad de pacientes por categoría atendidos en total
+        System.out.println("\nCantidad de pacientes atendidos por categoría:");
+        for (int i = 1; i <= 5; i++) {
+            System.out.println("Categoría C" + i + ": " + pacientesPorCategoria.get(i) + " pacientes");
+        }
+
+        // 2. Promedios de tiempo de espera por categoría
+        System.out.println("\nTiempo promedio de espera por categoría:");
+        for (int i = 1; i <= 5; i++) {
+            List<Long> tiempos = tiemposEsperaPorCategoria.get(i);
+            double promedio = tiempos.isEmpty() ? 0 :
+                    tiempos.stream().mapToLong(Long::longValue).average().orElse(0);
+            System.out.printf("Categoría C%d: %.2f minutos\n", i, promedio);
+        }
+
+        // 3. Lista de pacientes que excedieron el tiempo máximo de espera
+        System.out.println("\nPacientes que excedieron el tiempo máximo de espera: " + pacientesFueraTiempo.size());
+        for (Paciente p : pacientesFueraTiempo) {
+            // El tiempo de espera es la diferencia entre su tiempo de llegada y el tiempo actual
+            long tiempoEspera = p.tiempoEsperaActual(p.getTiempoLlegada() + TIEMPOS_MAXIMOS.get(p.getCategoria()));
+            System.out.printf("ID: %s, Categoría: C%d, Tiempo de espera: %d minutos\n",
+                    p.getId(), p.getCategoria(), tiempoEspera);
+        }
+    }
+
+    public static void main(String[] args) {
+        SimuladorUrgencia simulador = new SimuladorUrgencia();
+        simulador.simular(144); // 144 pacientes para 24 horas (1 cada 10 minutos)
+    }
+}
 
 
 

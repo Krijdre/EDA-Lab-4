@@ -290,11 +290,11 @@ class Hospital {
 
         // Tiempos máximos de espera por categoría (en minutos)
         private static final Map<Integer, Integer> TIEMPOS_MAXIMOS = Map.of(
-                1, 15,    // Categoría 1: 15 minutos
-                2, 30,    // Categoría 2: 30 minutos
-                3, 60,    // Categoría 3: 1 hora
-                4, 120,   // Categoría 4: 2 horas
-                5, Integer.MAX_VALUE  // Categoría 5: sin límite
+                1, 0,
+                2, 30,
+                3, 90,
+                4, 180,
+                5, Integer.MAX_VALUE
         );
 
         public SimuladorUrgencia() {
@@ -317,92 +317,136 @@ class Hospital {
             int pacientesProcesados = 0;
             long timestamp_inicio = 0;
 
+            // Inicializar mapas
+            Map<String, Long> ultimoTiempoAtencionPorArea = new HashMap<>();
+            for (String area : new String[]{"SAPU", "urgencia_adulto", "infantil"}) {
+                ultimoTiempoAtencionPorArea.put(area, timestamp_inicio);
+            }
+
             // Simulación por minutos (24 horas = 1440 minutos)
             for (int minuto = 0; minuto < 1440; minuto++) {
-                long tiempoActual = timestamp_inicio + (minuto * 60); // Convertimos minutos a segundos
+                long tiempoActual = timestamp_inicio + (minuto * 60 * 1000);
 
-                // Llegada de paciente cada 10 minutos
+                // Verificar tiempos máximos cada 5 minutos
+                if (minuto % 5 == 0) {
+                    verificarTiemposMaximos(tiempoActual);
+                }
+
+                // Llegada de pacientes cada 10 minutos
                 if (minuto % 10 == 0 && pacientesProcesados < pacientesPorDia) {
                     if (!pacientesEnEspera.isEmpty()) {
                         Paciente nuevoPaciente = pacientesEnEspera.remove(0);
-                        nuevoPaciente.setTiempoLlegada(timestamp_inicio + (pacientesProcesados * 600));
+                        nuevoPaciente.setTiempoLlegada(tiempoActual);
                         hospital.registrarPaciente(nuevoPaciente);
                         pacientesProcesados++;
-                        pacientesAcumulados++;
-
-                        if (pacientesAcumulados >= 3) {
-                            atenderPacienteUrgente();
-                            atenderPacienteUrgente();
-                            pacientesAcumulados = 0;
-                        }
                     }
                 }
 
-                // Atención regular cada 15 minutos
+                // Atención de pacientes cada 15 minutos
                 if (minuto % 15 == 0) {
-                    atenderPaciente(tiempoActual);
+                    for (String area : ultimoTiempoAtencionPorArea.keySet()) {
+                        atenderPaciente(tiempoActual, ultimoTiempoAtencionPorArea);
+                    }
                 }
-
-                verificarTiemposMaximos(tiempoActual);
             }
 
             generarReporteSimulacion();
         }
 
 
-        private void atenderPaciente(long tiempoActual) {
+
+        private void atenderPaciente(long tiempoActual, Map<String, Long> ultimoTiempoAtencionPorArea) {
             Paciente paciente = hospital.atenderSiguiente();
             if (paciente != null) {
-                registrarAtencion(paciente, tiempoActual);
+                // Obtener el último tiempo de atención para el área del paciente
+                long ultimaAtencion = ultimoTiempoAtencionPorArea.get(paciente.getArea());
+                // El tiempo de atención será el máximo entre el tiempo actual y la última atención + 10 minutos
+                long tiempoAtencion = Math.max(tiempoActual, ultimaAtencion + (10 * 60 * 1000));
+                // Actualizar el último tiempo de atención para esta área
+                ultimoTiempoAtencionPorArea.put(paciente.getArea(), tiempoAtencion);
+
+                registrarAtencion(paciente, tiempoAtencion);
             }
         }
 
-        private void atenderPacienteUrgente() {
-            // Atención inmediata para casos de acumulación
+
+        private void atenderPacienteUrgente(long tiempoActual, Map<String, Long> ultimoTiempoAtencionPorArea) {
             Paciente paciente = hospital.atenderSiguiente();
             if (paciente != null) {
-                registrarAtencion(paciente, System.currentTimeMillis());
+                // Para casos urgentes, atendemos 5 minutos después del último paciente o en el tiempo actual
+                long ultimaAtencion = ultimoTiempoAtencionPorArea.get(paciente.getArea());
+                long tiempoAtencion = Math.max(tiempoActual, ultimaAtencion + (5 * 60 * 1000));
+                ultimoTiempoAtencionPorArea.put(paciente.getArea(), tiempoAtencion);
+
+                registrarAtencion(paciente, tiempoAtencion);
             }
         }
+
+
 
         private void registrarAtencion(Paciente paciente, long tiempoAtencion) {
-            long tiempoEspera = (tiempoAtencion - paciente.getTiempoLlegada()) / (60 * 1000); // Convertir a minutos
-            tiemposEspera.get(paciente.getCategoria()).add(tiempoEspera);
+            long tiempoEsperaMs = tiempoAtencion - paciente.getTiempoLlegada();
+            // Convertimos a minutos
+            long tiempoEsperaMinutos = tiempoEsperaMs / 60000;
+            tiemposEspera.get(paciente.getCategoria()).add(tiempoEsperaMinutos);
             contadorPorCategoria.put(
                     paciente.getCategoria(),
                     contadorPorCategoria.get(paciente.getCategoria()) + 1
             );
             paciente.setEstado("atendido");
-            System.out.println("Debug Atención - Paciente: " + paciente.getId());
+            System.out.println("Debug Atención detallado - Paciente: " + paciente.getId());
             System.out.println("  Categoría: " + paciente.getCategoria());
-            System.out.println("  Tiempo Llegada: " + paciente.getTiempoLlegada());
-            // Imprime el valor que se está agregando a tiemposEspera
-            System.out.println("  Tiempo agregado a tiemposEspera: " +
-                    tiemposEspera.get(paciente.getCategoria()).get(tiemposEspera.get(paciente.getCategoria()).size() - 1));
+            System.out.println("  Tiempo Llegada (ms): " + paciente.getTiempoLlegada());
+            System.out.println("  Tiempo Atención (ms): " + tiempoAtencion);
+            System.out.println("  Tiempo Espera (ms): " + tiempoEsperaMs);
+            System.out.println("  Tiempo Espera (min): " + tiempoEsperaMinutos);
 
 
         }
 
         private void verificarTiemposMaximos(long tiempoActual) {
-            List<Paciente> colaActual = new ArrayList<>();
+            // Crear una lista temporal para mantener los pacientes que no exceden tiempo
+            List<Paciente> pacientesEnEspera = new ArrayList<>();
             PriorityQueue<Paciente> cola = hospital.getColaAtencion();
 
+            // Limpiar la cola actual y verificar cada paciente
             while (!cola.isEmpty()) {
                 Paciente paciente = cola.poll();
-                long tiempoEspera = (tiempoActual - paciente.getTiempoLlegada()) / (60 * 1000);
+                long tiempoEsperaMinutos = (tiempoActual - paciente.getTiempoLlegada()) / (60 * 1000);
 
-                if (paciente.getCategoria() < 5 &&
-                        tiempoEspera > TIEMPOS_MAXIMOS.get(paciente.getCategoria())) {
+                // Verificar si el paciente ha excedido su tiempo máximo de espera
+                int tiempoMaximo = TIEMPOS_MAXIMOS.getOrDefault(paciente.getCategoria(), Integer.MAX_VALUE);
+
+                if (tiempoEsperaMinutos > tiempoMaximo) {
+                    // Si excedió el tiempo máximo, lo agregamos a la lista de pacientes fuera de tiempo
                     pacientesFueraTiempo.add(paciente);
+
+                    // Registrar la atención con prioridad máxima
                     registrarAtencion(paciente, tiempoActual);
+
+                    // Actualizar estadísticas
+                    contadorPorCategoria.put(
+                            paciente.getCategoria(),
+                            contadorPorCategoria.get(paciente.getCategoria()) + 1
+                    );
+
+                    System.out.println("¡ALERTA! Paciente ID: " + paciente.getId() +
+                            " excedió tiempo máximo de espera. Categoría: " +
+                            paciente.getCategoria() +
+                            ", Tiempo esperado: " + tiempoEsperaMinutos +
+                            " minutos (máximo: " + tiempoMaximo + " minutos)");
                 } else {
-                    colaActual.add(paciente);
+                    // Si no excedió el tiempo, lo mantenemos en la cola
+                    pacientesEnEspera.add(paciente);
                 }
             }
 
-            // Reintegrar pacientes a la cola
-            colaActual.forEach(p -> hospital.getColaAtencion().offer(p));
+            // Reintegrar los pacientes que no excedieron el tiempo máximo
+            for (Paciente p : pacientesEnEspera) {
+                cola.offer(p);
+            }
         }
+
 
 
         private void validarLinea(String linea) {
@@ -488,8 +532,6 @@ class Hospital {
         }
 
 
-
-
         private void generarReporteSimulacion() {
             System.out.println("\n=== REPORTE DE SIMULACIÓN DE URGENCIAS ===\n");
 
@@ -502,10 +544,16 @@ class Hospital {
             // Tiempos promedio de espera
             System.out.println("\nTiempos promedio de espera por categoría:");
             tiemposEspera.forEach((categoria, tiempos) -> {
-                double promedio = tiempos.isEmpty() ? 0 :
-                        tiempos.stream().mapToLong(t -> t).average().getAsDouble();
-                double minutos = promedio / 60000;
-                System.out.printf("Categoría %d: %.2f minutos\n", categoria, minutos);
+                if (!tiempos.isEmpty()) {
+                    double promedio = tiempos.stream()
+                            .mapToLong(t -> t)
+                            .average()
+                            .getAsDouble();
+                    // Ya no necesitamos dividir por 60000 porque los tiempos ya están en minutos
+                    System.out.printf("Categoría %d: %.2f minutos\n", categoria, promedio);
+                } else {
+                    System.out.printf("Categoría %d: 0.00 minutos\n", categoria);
+                }
             });
 
             // Pacientes fuera de tiempo

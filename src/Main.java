@@ -295,7 +295,7 @@ class SimuladorUrgencia {
             2, 30,     // 30 minutos
             3, 90,     // 90 minutos
             4, 180,    // 180 minutos
-            5, 240     // 4 horas
+            5, 9999     // ilimitado horas
     );
 
     public SimuladorUrgencia() {

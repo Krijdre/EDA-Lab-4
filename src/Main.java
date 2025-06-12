@@ -327,11 +327,6 @@ class Hospital {
             for (int minuto = 0; minuto < 1440; minuto++) {
                 long tiempoActual = timestamp_inicio + (minuto * 60 * 1000);
 
-                // Verificar tiempos máximos cada 5 minutos
-                if (minuto % 5 == 0) {
-                    verificarTiemposMaximos(tiempoActual);
-                }
-
                 // Llegada de pacientes cada 10 minutos
                 if (minuto % 10 == 0 && pacientesProcesados < pacientesPorDia) {
                     if (!pacientesEnEspera.isEmpty()) {
@@ -342,11 +337,9 @@ class Hospital {
                     }
                 }
 
-                // Atención de pacientes cada 15 minutos
+                // Atender UN paciente cada 15 minutos
                 if (minuto % 15 == 0) {
-                    for (String area : ultimoTiempoAtencionPorArea.keySet()) {
-                        atenderPaciente(tiempoActual, ultimoTiempoAtencionPorArea);
-                    }
+                    atenderPaciente(tiempoActual);
                 }
             }
 
@@ -355,19 +348,14 @@ class Hospital {
 
 
 
-        private void atenderPaciente(long tiempoActual, Map<String, Long> ultimoTiempoAtencionPorArea) {
+
+        private void atenderPaciente(long tiempoActual) {
             Paciente paciente = hospital.atenderSiguiente();
             if (paciente != null) {
-                // Obtener el último tiempo de atención para el área del paciente
-                long ultimaAtencion = ultimoTiempoAtencionPorArea.get(paciente.getArea());
-                // El tiempo de atención será el máximo entre el tiempo actual y la última atención + 10 minutos
-                long tiempoAtencion = Math.max(tiempoActual, ultimaAtencion + (10 * 60 * 1000));
-                // Actualizar el último tiempo de atención para esta área
-                ultimoTiempoAtencionPorArea.put(paciente.getArea(), tiempoAtencion);
-
-                registrarAtencion(paciente, tiempoAtencion);
+                registrarAtencion(paciente, tiempoActual);
             }
         }
+
 
 
         private void atenderPacienteUrgente(long tiempoActual, Map<String, Long> ultimoTiempoAtencionPorArea) {

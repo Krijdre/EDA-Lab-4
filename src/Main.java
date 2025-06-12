@@ -315,6 +315,7 @@ class SimuladorUrgencia {
         cargarPacientesDesdeArchivo("Pacientes_24h.txt");
     }
 
+
     public void simular(int pacientesPorDia) {
         long tiempoSimulacion = 24 * 60; // 24 horas en minutos
         long tiempoActual = 0;
@@ -323,6 +324,9 @@ class SimuladorUrgencia {
         System.out.println("Iniciando simulación de 24 horas de urgencias hospitalarias...");
 
         while (tiempoActual < tiempoSimulacion) {
+            // Ciclo de 1 minuto - Mostrar el tiempo actual en cada iteración
+            System.out.println("Minuto actual: " + tiempoActual);
+
             // Cada 10 minutos llega un nuevo paciente
             if (tiempoActual % 10 == 0 && !pacientesEnEspera.isEmpty()) {
                 Paciente nuevoPaciente = pacientesEnEspera.remove(0);
@@ -357,6 +361,24 @@ class SimuladorUrgencia {
 
         // Generar reporte final
         generarReporteSimulacion();
+    }
+
+    private void actualizarEstadisticasMinuto(long tiempoActual) {
+        // Aquí puedes implementar cualquier lógica que deba ejecutarse cada minuto
+        // Por ejemplo, actualizar estadísticas, mostrar información, etc.
+
+        // Si deseas monitorear la cola en cada minuto:
+        int pacientesEnCola = hospital.getColaAtencion().size();
+
+        // Cada 5 minutos muestra un resumen para no saturar la consola
+        if (tiempoActual % 5 == 0) {
+            System.out.println("Minuto " + tiempoActual + ": " + pacientesEnCola + " pacientes en cola de espera");
+        }
+
+        // También podrías realizar otras tareas cada minuto, como:
+        // - Actualizar gráficos en tiempo real
+        // - Verificar condiciones de saturación
+        // - Recolectar datos para análisis
     }
 
     private boolean atenderPaciente(long tiempoActual) {
